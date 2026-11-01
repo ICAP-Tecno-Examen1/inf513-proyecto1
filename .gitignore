@@ -1,0 +1,14 @@
+# Archivos compilados
+target/
+classes/
+*.class
+
+# IDE
+.vscode/
+.idea/
+*.iml
+
+# Logs
+*.log
+
+.env
