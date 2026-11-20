@@ -17,7 +17,7 @@ final class Validar {
     static String texto(List<String> params, int pos, String campo) {
         String valor = opcional(params, pos);
         if (valor == null) {
-            throw new IllegalArgumentException("Error en el campo " + (pos + 1) + " (" + campo
+            throw new ErrorParametro("Error en el campo " + (pos + 1) + " (" + campo
                     + "): falta un valor obligatorio.");
         }
         return valor;
@@ -42,7 +42,7 @@ final class Validar {
         } catch (NumberFormatException ignorado) {
             // se informa abajo
         }
-        throw new IllegalArgumentException("El campo " + campo + " debe ser un número entero positivo.");
+        throw new ErrorParametro("El campo " + campo + " debe ser un número entero positivo.");
     }
 
     static int entero(String valor, String campo, int minimo) {
@@ -54,7 +54,7 @@ final class Validar {
         } catch (NumberFormatException ignorado) {
             // se informa abajo
         }
-        throw new IllegalArgumentException("El campo " + campo + " debe ser un entero mayor o igual a " + minimo + ".");
+        throw new ErrorParametro("El campo " + campo + " debe ser un entero mayor o igual a " + minimo + ".");
     }
 
     static BigDecimal monto(String valor, String campo, BigDecimal minimo, BigDecimal maximo) {
@@ -66,7 +66,7 @@ final class Validar {
         } catch (NumberFormatException ignorado) {
             // se informa abajo
         }
-        throw new IllegalArgumentException("El campo " + campo + " debe ser un número entre " + minimo + " y "
+        throw new ErrorParametro("El campo " + campo + " debe ser un número entre " + minimo + " y "
                 + maximo + ", con hasta 2 decimales.");
     }
 
@@ -78,7 +78,7 @@ final class Validar {
         try {
             return Date.valueOf(LocalDate.parse(valor));
         } catch (DateTimeException e) {
-            throw new IllegalArgumentException("El campo " + campo + " debe tener el formato AAAA-MM-DD.");
+            throw new ErrorParametro("El campo " + campo + " debe tener el formato AAAA-MM-DD.");
         }
     }
 
@@ -90,13 +90,13 @@ final class Validar {
                 return opcion;
             }
         }
-        throw new IllegalArgumentException("El campo " + campo + " debe ser uno de: "
+        throw new ErrorParametro("El campo " + campo + " debe ser uno de: "
                 + String.join(", ", opciones) + ".");
     }
 
     /** Error de un campo indicando su posición (1 = primer parámetro que escribe el usuario). */
     static IllegalArgumentException errorCampo(int posicion, String campo, String valor, String regla) {
-        return new IllegalArgumentException("Error en el campo " + posicion + " (" + campo + "), valor '"
+        return new ErrorParametro("Error en el campo " + posicion + " (" + campo + "), valor '"
                 + valor + "': " + regla + ".");
     }
 
@@ -130,13 +130,13 @@ final class Validar {
 
     static void correo(String correo) {
         if (!esCorreo(correo)) {
-            throw new IllegalArgumentException("El correo '" + correo + "' no tiene un formato válido.");
+            throw new ErrorParametro("El correo '" + correo + "' no tiene un formato válido.");
         }
     }
 
     static void clave(String clave) {
         if (clave.length() < 8) {
-            throw new IllegalArgumentException("La contraseña debe tener al menos 8 caracteres.");
+            throw new ErrorParametro("La contraseña debe tener al menos 8 caracteres.");
         }
     }
 }

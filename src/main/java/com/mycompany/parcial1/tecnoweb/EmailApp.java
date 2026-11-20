@@ -7,8 +7,11 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.mail.internet.MimeUtility;
 
@@ -88,6 +91,54 @@ public class EmailApp implements ICasoUsoListener, IEmailListener {
             { "Becas", "DELBES[\"id_matricula\"]", "Quitar beca", DPermiso.BECA_ASIGNAR },
     };
 
+    // Un ejemplo válido por comando; se muestra cuando el usuario escribe mal un parámetro.
+    private static final Map<String, String> EJEMPLOS = Map.ofEntries(
+            Map.entry("LISUSU", "LISUSU[\"-\"]"),
+            Map.entry("MODUSU", "MODUSU[\"7654321\",\"-\",\"-\",\"71234567\",\"-\",\"-\"]"),
+            Map.entry("MODCLA", "MODCLA[\"ClaveSegura1\",\"OtraClave123\"]"),
+            Map.entry("DELUSU", "DELUSU[\"7654321\"]"),
+            Map.entry("LISROL", "LISROL[]"),
+            Map.entry("INSROL", "INSROL[\"7654321\",\"Secretaria\"]"),
+            Map.entry("DELROL", "DELROL[\"7654321\",\"Secretaria\"]"),
+            Map.entry("LISPER", "LISPER[]"),
+            Map.entry("INSPER", "INSPER[\"Profesor\",\"USUARIO_VER\"]"),
+            Map.entry("DELPER", "DELPER[\"Profesor\",\"USUARIO_VER\"]"),
+            Map.entry("LISPRO", "LISPRO[\"1\"]"),
+            Map.entry("LISOFE", "LISOFE[]"),
+            Map.entry("LISARA", "LISARA[\"1\"]"),
+            Map.entry("INSPRO", "INSPRO[\"DIP-X\",\"Diplomado X\",\"Descripción\",\"DIPLOMADO\"]"),
+            Map.entry("MODPRO", "MODPRO[\"1\",\"-\",\"-\",\"-\",\"ACTIVO\"]"),
+            Map.entry("DELPRO", "DELPRO[\"1\"]"),
+            Map.entry("INSMAL", "INSMAL[\"1\",\"V1\",\"240\",\"2027-01-01\"]"),
+            Map.entry("LISMAL", "LISMAL[\"1\"]"),
+            Map.entry("INSOFE", "INSOFE[\"DIP-X-1\",\"1\",\"VIRTUAL\",\"2027-03-01\",\"2027-06-30\",\"30\",\"5\",\"2027\"]"),
+            Map.entry("MODOFE", "MODOFE[\"1\",\"CERRADA\",\"-\",\"-\"]"),
+            Map.entry("DELOFE", "DELOFE[\"1\"]"),
+            Map.entry("INSARA", "INSARA[\"3\",\"Colegiatura\",\"3000\",\"UNICO\"]"),
+            Map.entry("DELARA", "DELARA[\"1\"]"),
+            Map.entry("INSPRE", "INSPRE[\"1\",\"Deseo inscribirme\"]"),
+            Map.entry("LISPRE", "LISPRE[\"PENDIENTE\"]"),
+            Map.entry("CANPRE", "CANPRE[\"2\"]"),
+            Map.entry("APRPRE", "APRPRE[\"1\",\"Datos correctos\"]"),
+            Map.entry("RECPRE", "RECPRE[\"2\",\"Falta título\"]"),
+            Map.entry("LISMAT", "LISMAT[]"),
+            Map.entry("LISCUO", "LISCUO[\"1\"]"),
+            Map.entry("LISMET", "LISMET[]"),
+            Map.entry("RESPAG", "RESPAG[\"1\",\"QR\"]"),
+            Map.entry("PAGCUO", "PAGCUO[\"1\"]"),
+            Map.entry("PAGARQR", "PAGARQR[\"1\"]"),
+            Map.entry("PEDPAG", "PEDPAG[\"1\"]"),
+            Map.entry("INSPAG", "INSPAG[\"1\",\"1\",\"2100\",\"QR-0001\",\"https://ejemplo.com/c.jpg\"]"),
+            Map.entry("LISPAG", "LISPAG[]"),
+            Map.entry("CONPAG", "CONPAG[\"1\"]"),
+            Map.entry("RECPAG", "RECPAG[\"1\",\"QR vencido\"]"),
+            Map.entry("LISBEC", "LISBEC[]"),
+            Map.entry("INSBEC", "INSBEC[\"Beca Excelencia\",\"Por excelencia académica\",\"50\",\"ICAP\"]"),
+            Map.entry("INSBES", "INSBES[\"1\",\"1\"]"),
+            Map.entry("DELBES", "DELBES[\"1\"]"));
+
+    private static final Pattern CODIGO_COMANDO = Pattern.compile("^\\s*([A-Za-z]{6})\\s*\\[");
+
     private final EmailReceipt emailReceipt;
     private final DUsuario dUsuario = new DUsuario();
     private final NUsuario nUsuario = new NUsuario();
@@ -134,6 +185,10 @@ public class EmailApp implements ICasoUsoListener, IEmailListener {
             }
             sendEmail(new Email(sender, "Solicitud no procesada", HtmlRes.generateErrorListMessage(
                     "Solicitud no procesada", ex.getErrores(), ex.getFormato())));
+        } catch (ErrorParametro ex) {
+            System.out.println("Error: [" + sender + "] " + ex.getMessage());
+            sendEmail(new Email(sender, "Solicitud no procesada", HtmlRes.generateErrorListMessage(
+                    "Solicitud no procesada", List.of(ex.getMessage()), formatoDe(event.getCommand()))));
         } catch (IllegalArgumentException | IllegalStateException ex) {
             System.out.println("Error: [" + sender + "] " + ex.getMessage());
             sendEmail(new Email(sender, "Solicitud no procesada",
@@ -144,6 +199,30 @@ public class EmailApp implements ICasoUsoListener, IEmailListener {
             sendEmail(new Email(sender, "Error del sistema", HtmlRes.generateErrorMessage("Error del sistema",
                     "No se pudo procesar tu solicitud. Intenta nuevamente en unos minutos.")));
         }
+    }
+
+    /** Formato y ejemplo del comando escrito (p. ej. INSPRE["1"]); vacío si no se reconoce. */
+    private static String formatoDe(String comando) {
+        if (comando == null) {
+            return "";
+        }
+        Matcher m = CODIGO_COMANDO.matcher(comando.toUpperCase(Locale.ROOT));
+        if (!m.find()) {
+            return "";
+        }
+        String codigo = m.group(1);
+        List<String> formatos = new ArrayList<>();
+        for (String[] c : COMANDOS) {
+            if (c[1].startsWith(codigo + "[") && !formatos.contains(c[1])) {
+                formatos.add(c[1]);
+            }
+        }
+        if (formatos.isEmpty()) {
+            return "";
+        }
+        String texto = "Formato correcto: " + String.join("  o  ", formatos) + ".";
+        String ejemplo = EJEMPLOS.get(codigo);
+        return ejemplo == null ? texto : texto + " Ejemplo: " + ejemplo;
     }
 
     private void noDisponible(ParamsAction event) {
