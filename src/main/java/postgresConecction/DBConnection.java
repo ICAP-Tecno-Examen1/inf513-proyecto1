@@ -8,7 +8,7 @@ public class DBConnection {
      * true  -> base local (localhost / prueba15sa). Usuario y clave en .env (DB_USER, DB_PASSWORD).
      * false -> base del ing (www.tecnoweb.org.bo / db_grupo15sa), los valores de abajo.
      */
-    public static final boolean USE_LOCAL = true;
+    public static final boolean USE_LOCAL = false;
 
     // Servidor del ing (no borrar: se usa el día del examen)
     private static final String ING_SERVER = "www.tecnoweb.org.bo";

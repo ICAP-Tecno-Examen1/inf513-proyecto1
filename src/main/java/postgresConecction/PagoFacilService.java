@@ -4,7 +4,15 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.awt.Color;
+import java.awt.Font;
+import java.awt.Graphics2D;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
+import java.time.LocalDateTime;
 import java.util.Base64;
+import java.util.Random;
+import javax.imageio.ImageIO;
 
 import org.json.JSONObject;
 import org.json.JSONArray;
@@ -18,6 +26,8 @@ import io.github.cdimascio.dotenv.Dotenv;
  *   - PAGOFACIL_TOKEN_SERVICE: Token de servicio de Pago Fácil
  *   - PAGOFACIL_TOKEN_SECRET: Secret de Pago Fácil
  *   - PAGOFACIL_CALLBACK_URL: URL del webhook (ej: https://xxx.ngrok-free.app/webhook/pagofacil)
+ *   - PAGOFACIL_SIMULADO=true (opcional): no llama a Pago Fácil; genera un QR de prueba y el pago
+ *     se confirma abriendo http://localhost:8080/webhook/simular?pago={id_pago} (ver WebHookServer).
  */
 public class PagoFacilService {
 
@@ -26,12 +36,15 @@ public class PagoFacilService {
     public static String TC_TOKEN_SECRET;
     public static String BASE_URL = "https://masterqr.pagofacil.com.bo/api/services/v2";
     public static String CALLBACK_URL;
+    /** Modo simulación: sin credenciales ni llamadas a la API de Pago Fácil. */
+    public static boolean SIMULADO;
 
     static {
         dotenv = Dotenv.configure().ignoreIfMissing().load();
         TC_TOKEN_SERVICE = dotenv.get("PAGOFACIL_TOKEN_SERVICE");
         TC_TOKEN_SECRET = dotenv.get("PAGOFACIL_TOKEN_SECRET");
         CALLBACK_URL = dotenv.get("PAGOFACIL_CALLBACK_URL");
+        SIMULADO = "true".equalsIgnoreCase(dotenv.get("PAGOFACIL_SIMULADO", "false").trim());
     }
 
     private final HttpClient httpClient;
@@ -103,6 +116,9 @@ public class PagoFacilService {
      * @throws Exception si falla la generación o el login
      */
     public JSONObject generarQR(String[] pagoData, String[] usuarioData, Integer cuotaId) throws Exception {
+        if (SIMULADO) {
+            return generarQrSimulado(pagoData, cuotaId);
+        }
         if (CALLBACK_URL == null || CALLBACK_URL.isEmpty()) {
             throw new Exception("Variable de entorno PAGOFACIL_CALLBACK_URL debe estar configurada.");
         }
@@ -180,5 +196,59 @@ public class PagoFacilService {
                 .build();
 
         return httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+    }
+
+    /**
+     * Respuesta con la misma forma que la de Pago Fácil, pero sin llamar a la API. La imagen es un
+     * QR de prueba que no se puede pagar: el cobro se simula con /webhook/simular?pago={id_pago}.
+     */
+    private JSONObject generarQrSimulado(String[] pagoData, Integer cuotaId) throws Exception {
+        String paymentNumber = "CUOTA-" + cuotaId + "-" + pagoData[0] + "-" + pagoData[7] + "-sim";
+        String urlSimular = "http://localhost:" + WebHookServer.PORT + "/webhook/simular?pago=" + pagoData[0];
+        System.out.println("=== PAGO FÁCIL SIMULADO ===");
+        System.out.println("Pedido: " + paymentNumber + " | Monto: Bs " + pagoData[4]);
+        System.out.println("Para simular el pago abre: " + urlSimular);
+
+        JSONObject values = new JSONObject();
+        values.put("qrBase64", Base64.getEncoder().encodeToString(imagenSimulada(paymentNumber, pagoData[0], pagoData[4])));
+        values.put("transactionId", "SIMULADO-" + pagoData[0]);
+        values.put("expirationDate", LocalDateTime.now().plusDays(1).withNano(0).toString().replace('T', ' '));
+        return new JSONObject().put("error", 0).put("values", values);
+    }
+
+    // Imagen con aspecto de QR (no es un QR real) y la leyenda del pago.
+    private static byte[] imagenSimulada(String semilla, String idPago, String monto) throws Exception {
+        int modulos = 25, lado = 10, margen = 20, ancho = modulos * lado + 2 * margen;
+        BufferedImage img = new BufferedImage(ancho, ancho + 50, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = img.createGraphics();
+        g.setColor(Color.WHITE);
+        g.fillRect(0, 0, img.getWidth(), img.getHeight());
+        g.setColor(Color.BLACK);
+        Random random = new Random(semilla.hashCode());
+        for (int y = 0; y < modulos; y++) {
+            for (int x = 0; x < modulos; x++) {
+                boolean esquina = (x < 7 && y < 7) || (x >= modulos - 7 && y < 7) || (x < 7 && y >= modulos - 7);
+                if (!esquina && random.nextBoolean()) {
+                    g.fillRect(margen + x * lado, margen + y * lado, lado, lado);
+                }
+            }
+        }
+        for (int[] e : new int[][] { { 0, 0 }, { modulos - 7, 0 }, { 0, modulos - 7 } }) {
+            int px = margen + e[0] * lado, py = margen + e[1] * lado;
+            g.fillRect(px, py, 7 * lado, 7 * lado);
+            g.setColor(Color.WHITE);
+            g.fillRect(px + lado, py + lado, 5 * lado, 5 * lado);
+            g.setColor(Color.BLACK);
+            g.fillRect(px + 2 * lado, py + 2 * lado, 3 * lado, 3 * lado);
+        }
+        g.setColor(new Color(198, 40, 40));
+        g.setFont(new Font(Font.SANS_SERIF, Font.BOLD, 16));
+        g.drawString("QR SIMULADO - Pago #" + idPago, margen, ancho + 15);
+        g.setFont(new Font(Font.SANS_SERIF, Font.PLAIN, 14));
+        g.drawString("Bs " + monto + " (no escanear)", margen, ancho + 38);
+        g.dispose();
+        ByteArrayOutputStream salida = new ByteArrayOutputStream();
+        ImageIO.write(img, "png", salida);
+        return salida.toByteArray();
     }
 }

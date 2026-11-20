@@ -23,6 +23,8 @@ import librerias.analex.Token;
 import negocio.*;
 import postgresConecction.EmailReceipt;
 import postgresConecction.EmailSend;
+import postgresConecction.PagoFacilService;
+import postgresConecction.WebHookServer;
 
 public class EmailApp implements ICasoUsoListener, IEmailListener {
 
@@ -655,15 +657,20 @@ public class EmailApp implements ICasoUsoListener, IEmailListener {
 
     // Envía el QR a quien lo pidió, al estudiante y, si se indicó, a quien pagará.
     private void enviarQr(String sender, NPago.QrPago qr) {
-        String titulo = "Código QR para tu pago";
-        String html = HtmlRes.generateQrMessage(titulo, new String[][] {
-                { "Pago", String.valueOf(qr.idPago()) },
-                { "Concepto", qr.detalle() },
-                { "Monto", "Bs " + qr.monto().toPlainString() },
-                { "Transacción", qr.transaccion() },
-                { "Expira", qr.expira() },
-                { "Estado", "PENDIENTE: se confirma automáticamente al pagar" }
-        }, CID_QR);
+        String titulo = PagoFacilService.SIMULADO ? "Código QR para tu pago (SIMULADO)" : "Código QR para tu pago";
+        List<String[]> datos = new ArrayList<>(List.of(
+                new String[] { "Pago", String.valueOf(qr.idPago()) },
+                new String[] { "Concepto", qr.detalle() },
+                new String[] { "Monto", "Bs " + qr.monto().toPlainString() },
+                new String[] { "Transacción", qr.transaccion() },
+                new String[] { "Expira", qr.expira() },
+                new String[] { "Estado", "PENDIENTE: se confirma automáticamente al pagar" }));
+        if (PagoFacilService.SIMULADO) {
+            datos.add(new String[] { "Simulación", "Este QR no se puede pagar. Para simular el pago abre, en la PC "
+                    + "donde corre el sistema: http://localhost:" + WebHookServer.PORT + "/webhook/simular?pago="
+                    + qr.idPago() });
+        }
+        String html = HtmlRes.generateQrMessage(titulo, datos.toArray(new String[0][]), CID_QR);
         Set<String> destinos = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
         destinos.add(sender);
         destinos.add(qr.correoEstudiante());
@@ -690,9 +697,12 @@ public class EmailApp implements ICasoUsoListener, IEmailListener {
             ParamsAction contexto = new ParamsAction(this, sender, comando);
             atender(contexto, () -> {
                 if (!esPublico(comando) && !dUsuario.estaActivo(sender)) {
-                    simpleNotify(sender, "Acceso no disponible", dUsuario.existeCorreo(sender)
-                            ? "Tu cuenta está inactiva. Comunícate con la administración del ICAP."
-                            : "Tu correo no está registrado. Envía HELP para ver cómo registrarte.");
+                    if (dUsuario.existeCorreo(sender)) {
+                        simpleNotify(sender, "Acceso no disponible",
+                                "Tu cuenta está inactiva. Comunícate con la administración del ICAP.");
+                    } else {
+                        simpleNotify(sender, "Debes registrarte primero", mensajeNoRegistrado(comando));
+                    }
                     return;
                 }
                 // Secuencial: los comandos de un mismo lote se atienden en orden de llegada.
@@ -709,6 +719,19 @@ public class EmailApp implements ICasoUsoListener, IEmailListener {
         } catch (Exception e) {
             return asunto;
         }
+    }
+
+    // Indica qué comando se rechazó, cómo registrarse y qué se puede usar sin registro.
+    private String mensajeNoRegistrado(String comando) {
+        String normalizado = comando == null ? "" : comando.trim().toUpperCase(Locale.ROOT);
+        String nombre = normalizado.matches("^[A-Z]{6}(\\[.*)?$") ? normalizado.substring(0, 6) : null;
+        String inicio = nombre != null
+                ? "No puedes usar el comando " + nombre + " porque tu correo no está registrado en el sistema."
+                : "Ese comando no está disponible: tu correo no está registrado en el sistema.";
+        return inicio + " Para usarlo, primero regístrate desde este mismo correo con "
+                + "INSUSU[\"nombres\",\"apellidos\",\"ci\",\"CI|PASAPORTE\",\"correo\",\"username\",\"password\","
+                + "\"telefono\",\"direccion\",\"AAAA-MM-DD\"]. Sin registrarte solo puedes usar: "
+                + String.join(", ", COMANDOS_PUBLICOS) + ". Envía HELP para ver el detalle.";
     }
 
     private boolean esPublico(String comando) {

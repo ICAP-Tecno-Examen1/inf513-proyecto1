@@ -24,7 +24,7 @@ public class NMetodoPago {
         return nombre(idMetodo).toUpperCase(Locale.ROOT).contains("EFECTIVO");
     }
 
-    boolean esPagoFacil(long idMetodo) throws SQLException {
+    public boolean esPagoFacil(long idMetodo) throws SQLException {
         return QR_PAGO_FACIL.equals(nombre(idMetodo));
     }
 

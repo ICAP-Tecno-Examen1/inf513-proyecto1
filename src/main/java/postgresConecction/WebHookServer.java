@@ -14,17 +14,21 @@ import com.sun.net.httpserver.HttpExchange;
 import org.json.JSONObject;
 import data.DMensualidad;
 import data.DPago;
+import negocio.NMetodoPago;
 import librerias.HtmlRes;
 
 public class WebHookServer {
 
     public static int PORT = 8080;
     private static final String CONTEXT = "/webhook/pagofacil";
+    /** Solo con PAGOFACIL_SIMULADO=true: simula que Pago Fácil avisa que se pagó un QR. */
+    private static final String CONTEXT_SIMULAR = "/webhook/simular";
 
     private HttpServer server;
     private final DPago dPago;
     private final DMensualidad dMensualidad;
     private final Set<String> processedWebhooks = new HashSet<>();
+    private final PagoFacilHandler pagoFacilHandler = new PagoFacilHandler();
 
     public WebHookServer() {
         this.dPago = new DPago();
@@ -34,11 +38,18 @@ public class WebHookServer {
     public void start() {
         try {
             server = HttpServer.create(new InetSocketAddress(PORT), 0);
-            server.createContext(CONTEXT, new PagoFacilHandler());
+            server.createContext(CONTEXT, pagoFacilHandler);
+            if (PagoFacilService.SIMULADO) {
+                server.createContext(CONTEXT_SIMULAR, new SimularHandler());
+            }
             server.setExecutor(null);
             server.start();
             System.out.println("=== WebHookServer iniciado en puerto " + getPort() + " ===");
             System.out.println("Escuchando en: http://localhost:" + getPort() + CONTEXT);
+            if (PagoFacilService.SIMULADO) {
+                System.out.println("PAGO FÁCIL SIMULADO: confirma un pago abriendo http://localhost:" + getPort()
+                        + CONTEXT_SIMULAR + "?pago={id_pago}");
+            }
         } catch (IOException e) {
             System.err.println("Error al iniciar WebHookServer: " + e.getMessage());
             e.printStackTrace();
@@ -58,6 +69,61 @@ public class WebHookServer {
 
     protected void enviarHtml(String to, String subject, String html) {
         new Thread(() -> new EmailSend().sendEmailHtml(to, subject, html)).start();
+    }
+
+    /**
+     * GET /webhook/simular?pago={id_pago}: arma el mismo PedidoID que Pago Fácil enviaría y lo
+     * procesa como un aviso de pago (Estado 2). Solo acepta pagos QR de Pago Fácil pendientes.
+     */
+    private class SimularHandler implements HttpHandler {
+
+        @Override
+        public void handle(HttpExchange exchange) throws IOException {
+            String query = exchange.getRequestURI().getQuery();
+            String id = null;
+            if (query != null) {
+                for (String par : query.split("&")) {
+                    if (par.startsWith("pago=")) {
+                        id = par.substring(5).trim();
+                    }
+                }
+            }
+            if (id == null || !id.matches("[0-9]{1,18}")) {
+                html(exchange, 400, "Falta el id del pago", "Usa /webhook/simular?pago={id_pago}.");
+                return;
+            }
+            long idPago = Long.parseLong(id);
+            try {
+                // { id_mensualidad, monto, referencia, estado, id_metodo_pago }
+                String[] pago = dPago.getParaQr(idPago);
+                if (pago == null || pago[0] == null || !new NMetodoPago().esPagoFacil(Long.parseLong(pago[4]))) {
+                    html(exchange, 404, "Pago no encontrado", "El pago " + idPago + " no existe o no es de Pago Fácil.");
+                    return;
+                }
+                if (!"PENDIENTE".equals(pago[3])) {
+                    html(exchange, 409, "Pago ya procesado", "El pago " + idPago + " ya está " + pago[3] + ".");
+                    return;
+                }
+                String pedidoId = "CUOTA-" + pago[0] + "-" + idPago + "-" + pago[2] + "-sim";
+                System.out.println("=== Webhook SIMULADO: " + pedidoId + " (Estado 2) ===");
+                pagoFacilHandler.procesarWebhook(pedidoId, 2);
+                String estado = dPago.getParaQr(idPago)[3];
+                html(exchange, 200, "Pago simulado", "Pago " + idPago + " por Bs " + pago[1] + ": " + estado
+                        + ". El estudiante recibirá el correo de confirmación.");
+            } catch (Exception e) {
+                System.err.println("Error simulando el pago " + idPago + ": " + e.getMessage());
+                html(exchange, 500, "Error", "No se pudo simular el pago: " + e.getMessage());
+            }
+        }
+
+        private void html(HttpExchange exchange, int status, String titulo, String mensaje) throws IOException {
+            byte[] bytes = HtmlRes.generateInfoMessage(titulo, mensaje).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().set("Content-Type", "text/html; charset=utf-8");
+            exchange.sendResponseHeaders(status, bytes.length);
+            try (OutputStream os = exchange.getResponseBody()) {
+                os.write(bytes);
+            }
+        }
     }
 
     private class PagoFacilHandler implements HttpHandler {

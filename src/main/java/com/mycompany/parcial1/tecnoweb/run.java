@@ -5,7 +5,7 @@ import io.github.cdimascio.dotenv.Dotenv;
 
 public class run {
 
-    public static final boolean USE_GMAIL = true;
+    public static final boolean USE_GMAIL = true; // false: responde desde grupo15sa@tecnoweb.org.bo (SMTP puerto 25)
 
     public static String GMAIL_USER = "jazz.tb.99@gmail.com";
     public static String GMAIL_APP_PASSWORD = "qdztkthuvmxhzguo";

@@ -171,6 +171,52 @@ class FlujoIcapTest {
     }
 
     @Test
+    void pagoFacilSimuladoGeneraQrYConfirmaSinLlamarALaApi() throws Exception {
+        boolean simuladoAntes = PagoFacilService.SIMULADO;
+        PagoFacilService.SIMULADO = true;
+        WebHookServer simulado = new WebHookServer() {
+            @Override
+            protected void enviarHtml(String to, String subject, String html) {
+                avisosWebhook.add(new Email(to, subject, html));
+            }
+        };
+        simulado.start();
+        try {
+            String est = nuevoEstudiante();
+            long mat = matricular(est, DIPLOMADO);
+            long c = cuota(mat, 1);
+            int pedidosAntes = pedidosQr.size();
+
+            List<Email> respuesta = enviar(est, "PAGCUO[\"" + c + "\"]");
+            assertEquals(pedidosAntes, pedidosQr.size(), "no debe llamar a Pago Fácil");
+            assertEquals((byte) 0x89, qrEnviado[0]);
+            assertEquals('P', qrEnviado[1]);
+            assertTrue(respuesta.get(0).getSubject().contains("SIMULADO"), respuesta.get(0).getSubject());
+            assertTrue(respuesta.get(0).getMessage().contains("/webhook/simular?pago="));
+            long idPago = Long.parseLong(valor("SELECT id_pago FROM pago WHERE id_mensualidad = ?", c));
+
+            avisosWebhook.clear();
+            assertEquals(400, simular(simulado, "abc"));
+            assertEquals(404, simular(simulado, "999999"));
+            assertEquals(200, simular(simulado, String.valueOf(idPago)));
+            assertEquals("CONFIRMADO", valor("SELECT estado_conciliacion FROM pago WHERE id_pago = ?", idPago));
+            assertEquals("CONFIRMADA", estadoMatricula(mat));
+            assertEquals(1, avisosWebhook.size());
+            assertTrue(avisosWebhook.get(0).getSubject().contains("Confirmado"));
+            assertEquals(409, simular(simulado, String.valueOf(idPago)));
+        } finally {
+            PagoFacilService.SIMULADO = simuladoAntes;
+            simulado.stop();
+        }
+    }
+
+    private int simular(WebHookServer servidor, String idPago) throws Exception {
+        return HttpClient.newHttpClient().send(HttpRequest.newBuilder()
+                .uri(URI.create("http://localhost:" + servidor.getPort() + "/webhook/simular?pago=" + idPago)).GET().build(),
+                HttpResponse.BodyHandlers.ofString()).statusCode();
+    }
+
+    @Test
     void webhookAvisaQueFaltanCuotasEnMensualidades() throws Exception {
         String est = nuevoEstudiante();
         long mat = matricular(est, MAESTRIA);
@@ -502,6 +548,17 @@ class FlujoIcapTest {
         assertTrue(texto(enviar(est, "HELP")).contains("INSPRE"));
         // Sin registro solo hay comandos públicos
         assertTrue(texto(enviar("nadie@mail.com", "LISMAT[]")).contains("no está registrado"));
+        for (String cmd : new String[] { "LISMAT[]", "INSPRE[\"1\",\"x\"]", "LISCUO[\"1\"]", "PAGCUO[\"1\"]",
+                "RESPAG[\"1\",\"QR\"]", "LISPAG[]", "MODCLA[\"a\",\"b\"]", "lispre[]" }) {
+            String r = texto(enviar("nadie@mail.com", cmd));
+            String nombre = cmd.substring(0, 6).toUpperCase();
+            assertTrue(r.contains("No puedes usar el comando " + nombre), cmd + " -> " + r);
+            assertTrue(r.contains("regístrate") && r.contains("INSUSU"), r);
+            assertTrue(r.contains("HELP, INSUSU, LISPRO, LISOFE, LISARA"), r);
+        }
+        // Lo público sigue disponible sin registro
+        assertTrue(texto(enviar("nadie@mail.com", "LISOFE[]")).contains("DIP-EDS-2027-1"));
+        assertTrue(texto(enviar("nadie@mail.com", "HELP")).contains("regístrate"));
         assertTrue(texto(enviar(est, "LISOFE[]")).contains("DIP-EDS-2027-1"));
 
         // La clave se guarda solo como hash y no vuelve en las respuestas

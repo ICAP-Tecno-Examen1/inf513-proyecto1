@@ -16,8 +16,16 @@ import postgresConecction.SqlConnection;
 abstract class DBase {
 
     protected Connection conectar() throws SQLException {
-        return new SqlConnection(DBConnection.database, DBConnection.server,
+        Connection conn = new SqlConnection(DBConnection.database, DBConnection.server,
                 DBConnection.port, DBConnection.user, DBConnection.password).connect();
+        if (conn == null) {
+            // SqlConnection ya dejó la causa en la consola; el usuario recibe un aviso claro.
+            System.err.println("Sin conexión a la base " + DBConnection.database + " en " + DBConnection.server
+                    + ":" + DBConnection.port);
+            throw new IllegalStateException("La base de datos no está disponible en este momento. "
+                    + "Intenta nuevamente en unos minutos.");
+        }
+        return conn;
     }
 
     protected ArrayList<String[]> consultar(String sql, Object... params) throws SQLException {
