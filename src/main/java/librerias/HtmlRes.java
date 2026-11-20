@@ -60,6 +60,20 @@ public class HtmlRes {
         return generateMessage("error-message", title, message);
     }
 
+    /** Varios errores de validación, uno por línea, y después el formato correcto. */
+    public static String generateErrorListMessage(String title, List<String> errores, String formato) {
+        StringBuilder items = new StringBuilder();
+        for (String error : errores) {
+            items.append("<li>").append(escape(error)).append("</li>");
+        }
+        return generateFullHtml(title, "<div class='error-message'>"
+                + "<h2>" + escape(title) + "</h2>"
+                + "<p>Revisa los siguientes campos:</p>"
+                + "<ul>" + items + "</ul>"
+                + "<p>" + escape(formato) + "</p>"
+                + "</div>");
+    }
+
     public static String generateInfoMessage(String title, String message) {
         return generateMessage("info-message", title, message);
     }

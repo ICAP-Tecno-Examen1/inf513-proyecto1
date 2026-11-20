@@ -127,7 +127,15 @@ public class EmailApp implements ICasoUsoListener, IEmailListener {
         String sender = event.getSender();
         try {
             accion.ejecutar();
+        } catch (ErroresValidacion ex) {
+            // Solo los motivos, sin parámetros: pueden incluir contraseñas.
+            for (String error : ex.getErrores()) {
+                System.out.println("Error: [" + sender + "] " + error);
+            }
+            sendEmail(new Email(sender, "Solicitud no procesada", HtmlRes.generateErrorListMessage(
+                    "Solicitud no procesada", ex.getErrores(), ex.getFormato())));
         } catch (IllegalArgumentException | IllegalStateException ex) {
+            System.out.println("Error: [" + sender + "] " + ex.getMessage());
             sendEmail(new Email(sender, "Solicitud no procesada",
                     HtmlRes.generateErrorMessage("Solicitud no procesada", ex.getMessage())));
         } catch (SQLException | RuntimeException ex) {

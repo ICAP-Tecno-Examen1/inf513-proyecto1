@@ -8,7 +8,7 @@ public class run {
     public static final boolean USE_GMAIL = true;
 
     public static String GMAIL_USER = "jazz.tb.99@gmail.com";
-    public static String GMAIL_APP_PASSWORD = "ihubmrvqxpakxjaz";
+    public static String GMAIL_APP_PASSWORD = "qdztkthuvmxhzguo";
 
     public static final String GMAIL_PORT = "465";
 

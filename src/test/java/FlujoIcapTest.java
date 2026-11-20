@@ -517,7 +517,7 @@ class FlujoIcapTest {
         // Registro: remitente, duplicados, formatos y rol
         String base = "\"Ana\",\"Rios\",\"801\",\"CI\",\"ana@mail.com\",\"ana\",\"ClaveSegura1\"";
         assertTrue(texto(enviar("otra@mail.com", "INSUSU[" + base + "]")).contains("mismo"));
-        assertTrue(texto(enviar("ana@mail.com", "INSUSU[" + base + ",\"Director\"]")).contains("Solo el Director"));
+        assertTrue(texto(enviar("ana@mail.com", "INSUSU[" + base + ",\"Director\"]")).contains("solo el Director puede asignar roles"));
         assertTrue(texto(enviar("ana@mail.com", "INSUSU[\"Ana\",\"Rios\",\"801\",\"CI\",\"ana@mail.com\",\"ana\",\"corta\"]")).contains("8 caracteres"));
         assertTrue(texto(enviar("ana@mail.com", "INSUSU[" + base + ",\"-\",\"-\",\"15/01/2000\"]")).contains("AAAA-MM-DD"));
         assertTrue(texto(enviar("ana@mail.com", "INSUSU[" + base + "]")).contains("Usuario registrado"));
@@ -587,7 +587,7 @@ class FlujoIcapTest {
         assertTrue(texto(enviar(DIRECTOR, "XXXYYY[]")).contains("no reconocido"));
         assertTrue(texto(enviar(DIRECTOR, "CONUSU[\"1\"]")).contains("no disponible"));
         assertTrue(texto(enviar(DIRECTOR, "LISOFE[\"abc\"]")).contains("debe ser un número"));
-        assertTrue(texto(enviar(COORDINADOR, "INSPRO[\"A\"]")).contains("Falta el campo"));
+        assertTrue(texto(enviar(COORDINADOR, "INSPRO[\"A\"]")).contains("falta un valor obligatorio"));
         assertTrue(texto(enviar(COORDINADOR, "INSARA[\"1\",\"X\",\"-5\",\"UNICO\"]")).contains("monto"));
         // "*" lista todo, como en el enunciado
         assertTrue(texto(enviar(est, "LISOFE[\"*\"]")).contains("DIP-EDS-2027-1"));

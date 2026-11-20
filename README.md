@@ -4,7 +4,22 @@ Los usuarios envían comandos en el **asunto** de un correo. El sistema los lee 
 operación en PostgreSQL y responde con un email HTML.
 
 - [CASOS_DE_USO.md](CASOS_DE_USO.md): descripción detallada de los casos de uso.
+- [COMANDOS_POR_ACTOR.md](COMANDOS_POR_ACTOR.md): comandos que puede usar cada actor y explicación de los flujos.
 - [GUIA_DE_PRUEBAS.md](GUIA_DE_PRUEBAS.md): guion de la demostración, comando por comando.
+
+## Ejecución rápida
+
+Requiere Java 17 y Maven. Desde la raíz del proyecto (la carpeta que contiene `pom.xml`):
+
+```bash
+mvn compile exec:java
+```
+
+El sistema queda en ejecución revisando el buzón cada 5 segundos; se detiene con `Ctrl + C`.
+Para comprobar que funciona, envía un correo al buzón del grupo con `HELP` en el asunto.
+
+La primera vez hay que preparar antes la base de datos y el `.env`: los pasos completos están en
+[Cómo ejecutar el sistema](#cómo-ejecutar-el-sistema).
 
 ## Estado del proyecto
 
@@ -95,9 +110,11 @@ El rol Profesor ya existe, pero no tiene funciones académicas en este parcial.
   programador de cuotas de la referencia. Las cuotas vencidas solo se muestran como `VENCIDA`.
 - **Motivo de rechazo de un pago:** se envía por correo, pero no se guarda porque `PAGO` no tiene columna para ello.
 
-## Cómo conectarse
+## Cómo ejecutar el sistema
 
-Requiere Java 17, Maven y PostgreSQL.
+Requiere Java 17, Maven y PostgreSQL (el cliente `psql`, para cargar los datos iniciales). Todos los
+comandos se ejecutan desde la raíz del proyecto. Los pasos 1 y 2 se hacen una sola vez; después basta
+con el paso 3.
 
 ### 1. Preparar la base de datos
 
@@ -140,7 +157,7 @@ mvn compile exec:java
 ```
 
 Al iniciar, muestra la base, el buzón y el modo SMTP, y revisa el buzón cada 5 segundos. Si falta una
-variable obligatoria, se detiene indicando cuál.
+variable obligatoria, se detiene indicando cuál. Para detenerlo, pulsa `Ctrl + C` en la terminal.
 
 ### 4. Enviar el primer comando
 
